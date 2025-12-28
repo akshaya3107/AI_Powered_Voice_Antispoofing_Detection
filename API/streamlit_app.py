@@ -9,12 +9,20 @@ import numpy as np
 import librosa
 import soundfile as sf
 import streamlit as st
+import tensorflow as tf
+
+@st.cache_resource
+def load_model():
+    return tf.keras.models.load_model("model.h5")
+model = load_model()
+    
+
 import matplotlib.pyplot as plt
 
 from app.src.deepfake import infa_deepfake  # your existing inference function
 
 # Hide TF warnings
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 warnings.filterwarnings("ignore")
 
 
