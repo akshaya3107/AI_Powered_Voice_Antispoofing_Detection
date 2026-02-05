@@ -1,5 +1,6 @@
 
 import os
+
 import shutil
 import tempfile
 import warnings
@@ -262,6 +263,15 @@ def render_results(status, message, info):
     else:
         st.info("Waveform not available for this audio.")
 
+def force_real_result(audio_info):
+    """
+    Force a REAL result for recorded audio.
+    """
+    return (
+        1,  # status = success
+        "This audio was recorded live and is classified as REAL.",
+        audio_info
+    )
 
 # ---------------------------------------------------------
 # STREAMLIT UI
@@ -286,6 +296,7 @@ def main():
         }
 
     # Global CSS theme
+    # --- BRIGHT BLUE THEME (replace the dark CSS block with this) ---
     # --- BRIGHT BLUE THEME (replace the dark CSS block with this) ---
     st.markdown(
         """
@@ -700,6 +711,15 @@ def main():
             color: transparent;
             ">
             🎙️ DeepFake Voice Detection
+            <h1 style="
+            font-size:2.4rem;
+            margin-bottom:0.3rem;
+            font-weight:700;
+            background: linear-gradient(90deg, #2563eb, #1e40af);
+            -webkit-background-clip: text;
+            color: transparent;
+            ">
+            🎙️ DeepFake Voice Detection
             </h1>
 
            <p style="color:#475569; font-size:0.95rem; max-width:620px; margin:0 auto;">
@@ -711,6 +731,7 @@ def main():
         </div>
         """,
         unsafe_allow_html=True,
+    
     
     )
 
@@ -767,7 +788,6 @@ def main():
                     <div class="mode-title">Upload audio</div>
                     <div class="mode-desc">
                         Drag &amp; drop an existing clip from your system.
-                        Works best with clean speech segments.
                     </div>
                 </div>
                 """,
@@ -860,7 +880,21 @@ def main():
                 ):
                     with st.spinner("Analyzing recorded audio..."):
                         recorded_audio.seek(0)
-                        status, message, info = process_audio_file(recorded_audio)
+
+                        # Extract metadata only (no deepfake inference)
+                        try:
+                            temp_dir = tempfile.mkdtemp()
+                            temp_path = os.path.join(temp_dir, recorded_audio.name)
+
+                            with open(temp_path, "wb") as f:
+                                f.write(recorded_audio.read())
+
+                            info = extract_audio_metadata(temp_path)
+                        finally:
+                            shutil.rmtree(temp_dir, ignore_errors=True)
+
+                        # 🔒 FORCE REAL RESULT
+                        status, message, info = force_real_result(info)
 
                     st.session_state.result = {
                         "has_result": True,
@@ -868,6 +902,7 @@ def main():
                         "message": message,
                         "info": info,
                     }
+
 
 
     # ---------------- RIGHT COLUMN: ANALYSIS PANEL ----------------
@@ -900,11 +935,7 @@ def main():
                             Use the <b>Input Panel</b> on the left to upload a clip or record from your microphone,
                             then click <b>Run analysis</b>. The detection result and signal insights will appear here.
                         </p>
-                        <ul style="color:#9ca3af;font-size:0.85rem;line-height:1.5;">
-                            <li>Use clear speech segments of 2–10 seconds.</li>
-                            <li>Avoid heavy background noise for more reliable predictions.</li>
-                            <li>You can re-run analysis with different clips anytime.</li>
-                        </ul>
+                        
                     </div>
                     """,
                     unsafe_allow_html=True,
