@@ -1,4 +1,4 @@
-tensorflow
+tensorflow==2.15.0
 keras
 #transformers==4.48.3
 scikit-learn
@@ -10,8 +10,9 @@ matplotlib
 numpy
 pandas
 librosa
-tensorflow_hub
+tensorflow_hub==0.15.0
 
 fastapi
 uvicorn
 python-multipart
+setuptools
