@@ -15,4 +15,5 @@ tensorflow_hub==0.15.0
 fastapi
 uvicorn
 python-multipart
-setuptools
+setuptools==69.5.1
+wheel
