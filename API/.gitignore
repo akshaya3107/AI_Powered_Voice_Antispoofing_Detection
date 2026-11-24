@@ -1,5 +1,0 @@
-# Ignore venv
-myvenv/
-
-# Ignore Python cache
-app/__pycache__/

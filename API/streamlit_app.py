@@ -1,17 +1,28 @@
 
-import os
+"""Streamlit front end for voice deepfake detection.
 
+Flow (both input modes go through the same path):
+
+    upload (st.file_uploader) / record (st.audio_input)
+      -> process_audio_file(): save to temp file
+           -> extract_audio_metadata()  (duration, pitch, energy, waveform)
+           -> infa_deepfake()           (REAL / FAKE from the model)
+      -> st.session_state.result
+      -> render_results()               (verdict card, metrics, waveform)
+
+Run from the ``API`` directory:  streamlit run streamlit_app.py
+"""
+import os
 import shutil
 import tempfile
 import warnings
 
 import numpy as np
 import librosa
-import soundfile as sf
 import streamlit as st
 import matplotlib.pyplot as plt
 
-from app.src.deepfake import infa_deepfake  # your existing inference function
+from app.src.deepfake import infa_deepfake
 
 # Hide TF warnings
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
@@ -22,21 +33,10 @@ warnings.filterwarnings("ignore")
 # HELPER FUNCTIONS
 # ---------------------------------------------------------
 def extract_audio_metadata(filepath):
-    """Extract details about the audio using soundfile instead of audioread."""
-    y, sr = sf.read(filepath, always_2d=False)
-
-    # If stereo, convert to mono
-    if isinstance(y, np.ndarray) and y.ndim > 1:
-        y = np.mean(y, axis=1)
-
-    # Ensure numpy array
-    y = np.array(y, dtype=np.float32)
-
-    # Resample to 16k if needed
+    """Extract details about the audio (mono, resampled to 16 kHz)."""
     target_sr = 16000
-    if sr != target_sr:
-        y = librosa.resample(y=y, orig_sr=sr, target_sr=target_sr)
-        sr = target_sr
+    y, sr = librosa.load(filepath, sr=target_sr, mono=True)
+    y = np.asarray(y, dtype=np.float32)
 
     duration = librosa.get_duration(y=y, sr=sr)
 
@@ -75,9 +75,9 @@ def process_audio_file(uploaded_file):
       - Cleanup
     """
     temp_dir = tempfile.mkdtemp()
-    temp_file_path = os.path.join(temp_dir, uploaded_file.name)
-    print("filepath: ", temp_file_path)
-    
+    filename = os.path.basename(uploaded_file.name or "") or "audio.wav"
+    temp_file_path = os.path.join(temp_dir, filename)
+
     try:
         data = uploaded_file.read()
 
@@ -263,16 +263,6 @@ def render_results(status, message, info):
     else:
         st.info("Waveform not available for this audio.")
 
-def force_real_result(audio_info):
-    """
-    Force a REAL result for recorded audio.
-    """
-    return (
-        1,  # status = success
-        "This audio was recorded live and is classified as REAL.",
-        audio_info
-    )
-
 # ---------------------------------------------------------
 # STREAMLIT UI
 # ---------------------------------------------------------
@@ -296,8 +286,6 @@ def main():
         }
 
     # Global CSS theme
-    # --- BRIGHT BLUE THEME (replace the dark CSS block with this) ---
-    # --- BRIGHT BLUE THEME (replace the dark CSS block with this) ---
     st.markdown(
         """
     <style>
@@ -830,7 +818,7 @@ def main():
 
             if uploaded_file is not None:
                 st.markdown("#### 🔊 Preview")
-                st.audio(uploaded_file.getvalue(), format="audio/wav")
+                st.audio(uploaded_file.getvalue(), format=uploaded_file.type or "audio/wav")
                 st.markdown("<br>", unsafe_allow_html=True)
 
                 if st.button(
@@ -879,21 +867,7 @@ def main():
                 ):
                     with st.spinner("Analyzing recorded audio..."):
                         recorded_audio.seek(0)
-
-                        # Extract metadata only (no deepfake inference)
-                        try:
-                            temp_dir = tempfile.mkdtemp()
-                            temp_path = os.path.join(temp_dir, recorded_audio.name)
-
-                            with open(temp_path, "wb") as f:
-                                f.write(recorded_audio.read())
-
-                            info = extract_audio_metadata(temp_path)
-                        finally:
-                            shutil.rmtree(temp_dir, ignore_errors=True)
-
-                        # 🔒 FORCE REAL RESULT
-                        status, message, info = force_real_result(info)
+                        status, message, info = process_audio_file(recorded_audio)
 
                     st.session_state.result = {
                         "has_result": True,

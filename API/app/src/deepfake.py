@@ -1,57 +1,52 @@
-import numpy as np
-import pandas as pd
-import librosa
+"""Deepfake voice inference.
+
+Pipeline (baked into the exported SavedModel, see the training notebook):
+
+    16 kHz mono waveform
+      -> YAMNet (pretrained, frozen) -> 1024-d embedding per ~0.48 s frame
+      -> ANN classifier             -> [P(FAKE), P(REAL)] per frame
+      -> mean over frames           -> final [P(FAKE), P(REAL)]
+"""
 import os
 
+import librosa
+import numpy as np
 import tensorflow as tf
-import tensorflow_hub as hub
 
-# Reload the model
+CLASSES = ["FAKE", "REAL"]
+TARGET_SR = 16000
+
+# Load the exported serving model once at import time
 current_direction = os.path.dirname(os.path.abspath(__file__))
-deepfake_model = tf.saved_model.load(os.path.join(current_direction,"artifact/ann_human_or_bot"))
+deepfake_model = tf.saved_model.load(
+    os.path.join(current_direction, "artifact", "ann_human_or_bot")
+)
+_infer = deepfake_model.signatures["serving_default"]
 
 
 def load_wav_16k_mono(filename):
-    try:
-      
-      """ Load a WAV file, convert it to a float tensor, resample to 16 kHz single-channel audio. """
-      sound_sample,sr=librosa.load(filename ,sr=16000)
-      return sound_sample
-    
-    except Exception as e:
-      print("load_wav_16k_mono")
-      return None
+    """Load an audio file as a float32 mono waveform resampled to 16 kHz."""
+    sound_sample, _ = librosa.load(filename, sr=TARGET_SR, mono=True)
+    return sound_sample.astype(np.float32)
 
-    
 
 def infa_deepfake(audio_path):
-  try:
-      testing_wav_data = load_wav_16k_mono(audio_path)
+    """
+    Classify an audio file as FAKE or REAL.
 
-      # Reload the model
-      #reloaded_model = tf.saved_model.load(model_path)
+    Returns (status, message): status is 1 on success with message the
+    predicted label, or 0 on failure with message a string describing the error.
+    """
+    try:
+        wav = load_wav_16k_mono(audio_path)
+        if wav.size == 0:
+            return 0, "Audio file is empty."
 
-      # If it's a saved model, access the signature
-      infer = deepfake_model.signatures['serving_default']
+        output = _infer(tf.convert_to_tensor(wav, dtype=tf.float32))
+        predictions = output["output_0"].numpy()
 
-      # Now use the model for prediction, passing in the necessary inputs (e.g., audio data)
-      # Make sure 'testing_wav_data' is prepared in the required shape/format
-      input_tensor = tf.convert_to_tensor(testing_wav_data, dtype=tf.float32)
+        return 1, CLASSES[int(np.argmax(predictions))]
 
-      # Get the prediction output
-      output = infer(input_tensor)
-      predictions = output['output_0']  # Adjust 'output_0' based on your model's output signature
-
-      #print(predictions)
-      my_classes=['FAKE', 'REAL']
-
-      human_bot = my_classes[tf.math.argmax(predictions)]
-      #print(f'The main sound is: {human_bot}')
-      status=1
-      return status,human_bot
-
-
-  except Exception as e:
-      print("infa")
-      status=0
-      return status,e
+    except Exception as e:
+        print(f"infa_deepfake failed: {e}")
+        return 0, str(e)
