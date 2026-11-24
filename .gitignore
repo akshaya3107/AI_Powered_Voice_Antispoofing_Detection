@@ -1,5 +1,16 @@
-# Ignore venv
+# Virtual environments
+venv/
 myvenv/
+.venv/
 
-# Ignore Python cache
-app/__pycache__/
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store

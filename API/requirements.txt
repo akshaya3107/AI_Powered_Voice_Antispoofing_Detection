@@ -1,19 +1,14 @@
-tensorflow==2.15.0
-keras
-#transformers==4.48.3
-scikit-learn
-#torch==2.5.1
-streamlit
+# Model inference (the SavedModel bundles YAMNet, so tensorflow_hub is not needed at runtime)
+tensorflow>=2.16
+numpy
+librosa
 soundfile
 
+# Streamlit web app
+streamlit>=1.39   # st.audio_input / st.container(border=...)
 matplotlib
-numpy
-pandas
-librosa
-tensorflow_hub==0.15.0
 
+# REST API
 fastapi
 uvicorn
 python-multipart
-setuptools==69.5.1
-wheel

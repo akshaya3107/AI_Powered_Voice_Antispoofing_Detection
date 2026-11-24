@@ -1,95 +1,61 @@
+"""FastAPI service exposing the voice deepfake detector.
+
+Endpoints
+---------
+GET  /           Health check.
+POST /deepfake   Upload an audio file (multipart field ``audio_file``) and get
+                 ``{"status": 1, "Message": "REAL" | "FAKE"}`` back. On failure
+                 ``status`` is 0 and ``Message`` holds the error.
+POST /depfake    Legacy alias of /deepfake (kept for existing clients).
+"""
+import os
+import shutil
+import tempfile
+import warnings
+
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse,FileResponse , JSONResponse,HTMLResponse
-
-import uvicorn 
-import tempfile
-import shutil
-import os
-import warnings
-import librosa
 
 from app.src.deepfake import infa_deepfake
 
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 warnings.filterwarnings("ignore")
 
 
-app=FastAPI(title="DeepFake",
-    description="FastAPI",
-    version="0.115.4")
+app = FastAPI(title="DeepFake", description="Voice deepfake detection API")
 
-# Allow all origins (replace * with specific origins if needed)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-) 
+)
+
 
 @app.get("/")
 async def root():
-  return {"Fast API":"API is working"}
+    """Health check."""
+    return {"Fast API": "API is working"}
 
 
-# Suppress warnings
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '0'  # 0 = all logs, 1 = filter out info, 2 = filter out warnings, 3 = filter out errors
-warnings.filterwarnings("ignore")
-
-@app.post("/depfake1")    
-async def deepfake(audio_file: UploadFile = File(...)):
-    disease_cls=[]
+@app.post("/deepfake")
+@app.post("/depfake", include_in_schema=False)
+def deepfake(audio_file: UploadFile = File(...)):
+    """Save the upload to a temp file, run inference, and clean up."""
+    temp_dir = tempfile.mkdtemp()
     try:
-        # Create a temporary directory
-        temp_dir = tempfile.mkdtemp()
+        # Use only the base name to avoid writing outside the temp dir
+        filename = os.path.basename(audio_file.filename or "") or "audio.wav"
+        temp_file_path = os.path.join(temp_dir, filename)
 
-        # Create a temporary file path
-        temp_file_path = os.path.join(temp_dir,audio_file.filename)
-
-        # Write the uploaded file content to the temporary file
         with open(temp_file_path, "wb") as temp_file:
             shutil.copyfileobj(audio_file.file, temp_file)
 
-        sound_sample,sr=librosa.load(temp_file_path,sr=16000)
-        return {"sound_sample":len(sound_sample)}
-    
-    except Exception as e:
-
-        return {"error":str(e)}
-
-
-
-@app.post("/depfake")    
-async def deepfake(audio_file: UploadFile = File(...)):
-    disease_cls=[]
-    try:
-        # Create a temporary directory
-        temp_dir = tempfile.mkdtemp()
-
-        # Create a temporary file path
-        temp_file_path = os.path.join(temp_dir,audio_file.filename)
-
-        # Write the uploaded file content to the temporary file
-        with open(temp_file_path, "wb") as temp_file:
-            shutil.copyfileobj(audio_file.file, temp_file)
-
-        sound_sample,sr=librosa.load(temp_file_path ,sr=16000)
-        print(sound_sample)
-
-        status, message=infa_deepfake(temp_file_path)
-        print("masage :" ,message)
-
-
-        shutil.rmtree(temp_dir)
-
-        if status ==1:
-            return {"status":1,"Message":message}
-        else:
-            return {"status":0,"Message":str(message)}
-    
+        status, message = infa_deepfake(temp_file_path)
+        return {"status": status, "Message": str(message)}
 
     except Exception as e:
-        print("app")
-        return {"status":0,"Message":e}
+        return {"status": 0, "Message": str(e)}
 
-
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
